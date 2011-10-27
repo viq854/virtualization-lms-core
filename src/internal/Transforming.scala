@@ -3,6 +3,7 @@ package internal
 
 import util.OverloadHack
 import scala.collection.mutable.HashMap
+import scala.reflect.SourceContext
 
 trait Transforming extends Expressions with OverloadHack {
   this: scala.virtualization.lms.common.BaseExp => // probably shouldn't be here...

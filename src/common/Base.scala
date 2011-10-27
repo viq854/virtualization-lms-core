@@ -2,6 +2,7 @@ package scala.virtualization.lms
 package common
 
 import internal._
+import scala.reflect.SourceContext
 
 /**
  * This trait automatically lifts any concrete instance to a representation.

@@ -2,7 +2,7 @@ package scala.virtualization.lms
 package common
 
 import scala.virtualization.lms.internal.{GenericFatCodegen,GenerationFailedException}
-import scala.reflect.RefinedManifest
+import reflect.{SourceContext, RefinedManifest}
 
 //import test7.{ArrayLoops,ArrayLoopsExp,ArrayLoopsFatExp,ScalaGenArrayLoops,ScalaGenFatArrayLoopsFusionOpt,TransformingStuff} // TODO: eliminate deps
 import util.OverloadHack
@@ -100,7 +100,7 @@ trait StructExpOpt extends StructExp {
 
 trait StructExpOptCommon extends StructExpOpt with VariablesExp with IfThenElseExp {
   
-  override def var_new[T:Manifest](init: Exp[T]): Var[T] = init match {
+  override def var_new[T:Manifest](init: Exp[T])(implicit ctx: SourceContext): Var[T] = init match {
     case Def(Struct(tag, elems)) =>
       //val r = Variable(struct(tag, elems.mapValues(e=>var_new(e).e))) // DON'T use mapValues!! <--lazy
       Variable(struct[Variable[T]](tag, elems.map(p=>(p._1,var_new(p._2).e))))
@@ -108,7 +108,7 @@ trait StructExpOptCommon extends StructExpOpt with VariablesExp with IfThenElseE
       super.var_new(init)
   }
 
-  override def var_assign[T:Manifest](lhs: Var[T], rhs: Exp[T]): Exp[Unit] = (lhs,rhs) match {
+  override def var_assign[T:Manifest](lhs: Var[T], rhs: Exp[T])(implicit ctx: SourceContext): Exp[Unit] = (lhs,rhs) match {
     case (Variable(Def(Struct(tagL,elemsL:Map[String,Exp[Variable[Any]]]))), Def(Struct(tagR, elemsR))) =>
       assert(tagL == tagR)
       assert(elemsL.keySet == elemsR.keySet)
@@ -118,7 +118,7 @@ trait StructExpOptCommon extends StructExpOpt with VariablesExp with IfThenElseE
     case _ => super.var_assign(lhs, rhs)
   }
   
-  override def readVar[T:Manifest](v: Var[T]) : Exp[T] = v match {
+  override def readVar[T:Manifest](v: Var[T])(implicit ctx: SourceContext): Exp[T] = v match {
     case Variable(Def(Struct(tag, elems: Map[String,Exp[Variable[Any]]]))) =>
       struct[T](tag, elems.map(p=>(p._1,readVar(Variable(p._2)))))
     case _ => super.readVar(v)
@@ -141,7 +141,7 @@ trait StructExpOptCommon extends StructExpOpt with VariablesExp with IfThenElseE
   }*/
 
 
-  override def ifThenElse[T:Manifest](cond: Rep[Boolean], a: Rep[T], b: Rep[T]) = (a,b) match {
+  override def ifThenElse[T:Manifest](cond: Rep[Boolean], a: Rep[T], b: Rep[T])(implicit ctx: SourceContext) = (a,b) match {
     case (Def(Struct(tagA,elemsA)), Def(Struct(tagB, elemsB))) =>
       assert(tagA == tagB)
       assert(elemsA.keySet == elemsB.keySet)
@@ -219,7 +219,7 @@ trait StructFatExpOptCommon extends StructFatExp with IfThenElseFatExp {
   }
   
   
-  override def ifThenElse[T:Manifest](cond: Rep[Boolean], a: Rep[T], b: Rep[T]) = (deReify(a),deReify(b)) match {
+  override def ifThenElse[T:Manifest](cond: Rep[Boolean], a: Rep[T], b: Rep[T])(implicit ctx: SourceContext) = (deReify(a),deReify(b)) match {
     case ((u, x@Def(Struct(tagA,elemsA))), (v, y@Def(Struct(tagB, elemsB)))) =>
       assert(tagA == tagB)
       assert(elemsA.keySet == elemsB.keySet)
