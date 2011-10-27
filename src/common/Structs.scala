@@ -1,43 +1,77 @@
 package scala.virtualization.lms
 package common
 
-import java.io.PrintWriter
-import scala.virtualization.lms.internal.{FatExpressions,GenericNestedCodegen,GenericFatCodegen}
+import scala.virtualization.lms.internal.{GenericFatCodegen,GenerationFailedException}
+import scala.reflect.RefinedManifest
 
 //import test7.{ArrayLoops,ArrayLoopsExp,ArrayLoopsFatExp,ScalaGenArrayLoops,ScalaGenFatArrayLoopsFusionOpt,TransformingStuff} // TODO: eliminate deps
-
 import util.OverloadHack
+import java.io.PrintWriter
 
-import java.io.{PrintWriter,StringWriter,FileOutputStream}
+trait StructOps extends Base {
 
-/*
-  Right now there is no user facing trait Struct. Should we have one? It seems like
-  structs are most useful as an implementation detail.
-*/
+  trait Struct extends Row[Rep]
 
+  implicit def repToStructOps(s: Rep[Struct]) = new StructOpsCls(s)
+  class StructOpsCls(s: Rep[Struct]) {
+    def selectDynamic[T:Manifest](index: String): Rep[T] = field(s, index)
+  }
 
-trait StructExp extends BaseExp with EffectExp {
+  def __new[T<:Row[Rep]:Manifest](fields: (String, Rep[T] => Rep[_])*): Rep[T] = anonStruct[T](fields)
 
-  abstract class Struct[T] extends Def[T] {
-    val tag: List[String]
-    val elems: Map[String, Rep[Any]]
+  def anonStruct[T:Manifest](fields: Seq[(String, Rep[T] => Rep[_])]): Rep[T]
+
+  def struct[T:Manifest](elems: (String, Rep[Any])*): Rep[T]
+  def field[T:Manifest](struct: Rep[Struct], index: String): Rep[T]
+}
+
+trait StructExp extends StructOps with BaseExp with EffectExp {
+
+  def anonStruct[T:Manifest](fields: Seq[(String, Rep[T] => Rep[_])]): Rep[T] = {
+    val x = fresh[T]
+    val fieldSyms = fields map { case (index, rhs) => (index, rhs(x)) }
+    val fieldTypes = fieldSyms map { case (index, rhs) => (index, rhs.Type) }
+    struct(fieldSyms:_*)
   }
 
   object Struct {
-    def unapply[T](s: Struct[T]): Option[(List[String], Map[String, Rep[Any]])] = Some((s.tag, s.elems))
+    def unapply[T](s: GenericStruct[T]): Option[(List[String], Map[String, Rep[Any]])] = Some((s.tag, s.elems))
+  }
+
+  def structName[T](m: Manifest[T]): String = m match {
+    case rm: RefinedManifest[T] => "Anon_" + rm.erasure.getSimpleName + "_" + rm.fields.map(f => structName(f._2)).mkString("_")
+    case _ => m.erasure.getSimpleName + m.typeArguments.map(a => structName(a)).mkString("_")
+  }
+
+  /*abstract class NewStruct[T] extends Def[T] { //base class for 'NewDSLType' nodes to allow DSL pattern-matching
+    val tag: List[String]
+    val elems: Map[String, Rep[Any]]
+  } */ //TODO: can't bypass registerStruct
+
+  case class GenericStruct[T](tag: List[String], elems: Map[String,Rep[Any]]) extends Def[T]
+  case class Field[T:Manifest](struct: Rep[Struct], index: String) extends Def[T]
+
+  def struct[T:Manifest](elems: (String, Rep[Any])*): Rep[T] = struct(Map(elems:_*))
+  def struct[T:Manifest](elems: Map[String, Rep[Any]]): Rep[T] = struct(List(structName(manifest[T])),elems)
+  def struct[T:Manifest](tag: List[String], elems: Map[String, Rep[Any]]): Rep[T] = {
+    registerStruct(tag, elems)
+    GenericStruct[T](tag, elems)
   }
   
-  case class GenericStruct[T](tag: List[String], elems: Map[String,Rep[Any]]) extends Struct[T]
-  case class Field[T](struct: Rep[Any], index: String, tp: Manifest[T]) extends Def[T]
+  def field[T:Manifest](struct: Rep[Struct], index: String): Rep[T] = Field[T](struct, index)
   
-  def struct[T:Manifest](tag: List[String], elems: (String, Rep[Any])*): Rep[T] = struct(tag, Map(elems:_*))
-  def struct[T:Manifest](tag: List[String], elems: Map[String, Rep[Any]]): Rep[T] = GenericStruct[T](tag, elems)
+  //FIXME: reflectMutable has to take the Def; this is overly conservative as it orders all reads (treats field read as an alloc and read)
+  def mfield[T:Manifest](struct: Rep[Struct], index: String): Exp[T] = reflectMutable(Field[T](struct, index))
+  def vfield[T:Manifest](struct: Rep[Struct], index: String): Variable[T] = Variable(Field[Variable[T]](struct, index))
   
-  def field[T:Manifest](struct: Rep[Any], index: String): Rep[T] = Field[T](struct, index, manifest[T])
-  
-  //FIXME: reflectMutable has to take the Def
-  //def mfield[T:Manifest](struct: Rep[Any], index: String): Rep[T] = reflectMutable(Field[T](struct, index, manifest[T]))
-  
+  val encounteredStructs = new scala.collection.mutable.HashMap[List[String], Map[String, Manifest[Any]]]
+
+  def registerStruct(tag: List[String], elems: Map[String, Rep[Any]]) {
+    encounteredStructs(tag) = elems.map(e => (e._1,e._2.Type)) //assume tag uniquely specifies struct shape
+  }
+
+  def structType[T:Manifest] = encounteredStructs.get(List(structName(manifest[T])))
+
   // FIXME: need  syms override because Map is not a Product
   override def syms(x: Any): List[Sym[Any]] = x match {
     case z:Iterable[_] => z.toList.flatMap(syms)
@@ -57,7 +91,7 @@ trait StructExp extends BaseExp with EffectExp {
   
 trait StructExpOpt extends StructExp {
 
-  override def field[T:Manifest](struct: Rep[Any], index: String): Rep[T] = struct match {
+  override def field[T:Manifest](struct: Rep[Struct], index: String): Rep[T] = struct match {
     case Def(Struct(tag, elems)) => elems(index).asInstanceOf[Rep[T]]
     case _ => super.field[T](struct, index)
   }
@@ -212,14 +246,33 @@ trait ScalaGenStruct extends ScalaGenBase {
   
   override def emitNode(sym: Sym[Any], rhs: Def[Any])(implicit stream: PrintWriter) = rhs match {
     case Struct(tag, elems) =>
-      //emitValDef(sym, "new " + tag.last + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
-      emitValDef(sym, "Map(" + elems.map(e => "\"" + e._1 + "\"->" + quote(e._2)).mkString(",") + ") //" + tag.mkString(" "))
-    case Field(struct, index, tp) =>  
-      //emitValDef(sym, quote(struct) + "." + index)
-      println("WARNING: emitting field access: " + quote(struct) + "." + index)
-      emitValDef(sym, quote(struct) + "(\"" + index + "\").asInstanceOf[" + remap(tp) + "]")
+      emitValDef(sym, "new " + tag.last + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
+      //println("WARNING: emitting " + tag.mkString(" ") + " struct " + quote(sym))
+      //emitValDef(sym, "Map(" + elems.map(e => "\"" + e._1 + "\"->" + quote(e._2)).mkString(",") + ") //" + tag.mkString(" "))
+    case f@Field(struct, index) =>
+      emitValDef(sym, quote(struct) + "." + index)
+      //println("WARNING: emitting field access: " + quote(struct) + "." + index)
+      //emitValDef(sym, quote(struct) + "(\"" + index + "\").asInstanceOf[" + remap(f.m) + "]") //FIXME: handle variable type Ref
     case _ => super.emitNode(sym, rhs)
   }
+
+  override def remap[A](m: Manifest[A]) = m match {
+    case s if s <:< manifest[Struct] => structName(m)
+    case _ => super.remap(m)
+  }
+
+  override def emitDataStructures(path: String) {
+    val stream = new PrintWriter(path + "Structs.scala")
+    stream.println("package generated.scala")
+    for ((tag, elems) <- encounteredStructs) {
+      stream.println()
+      stream.print("case class " + tag.mkString("") + "(")
+      stream.println(elems.map(e => e._1 + ": " + remap(e._2)).mkString(", ") + ")")
+    }
+    stream.close()
+    super.emitDataStructures(path)
+  }
+
 }
 
 trait ScalaGenFatStruct extends ScalaGenStruct with GenericFatCodegen {
