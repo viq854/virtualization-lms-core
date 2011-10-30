@@ -30,17 +30,18 @@ trait StringOps extends Variables with OverloadHack {
   def infix_trim(s: Rep[String])(implicit ctx: SourceContext) = string_trim(s)
   def infix_split(s: Rep[String], separators: Rep[String])(implicit ctx: SourceContext) = string_split(s, separators)
   def infix_endsWith(s: Rep[String], ews: Rep[String])(implicit ctx: SourceContext) = string_endswith(s, ews)
-  
+
   object String {
     def valueOf(a: Rep[Any])(implicit ctx: SourceContext) = string_valueof(a)
   }
+
 
   def string_plus(s: Rep[Any], o: Rep[Any])(implicit ctx: SourceContext): Rep[String]
   def string_trim(s: Rep[String])(implicit ctx: SourceContext): Rep[String]
   def string_split(s: Rep[String], separators: Rep[String])(implicit ctx: SourceContext): Rep[Array[String]]
   def string_valueof(d: Rep[Any])(implicit ctx: SourceContext): Rep[String]
   def string_endswith(s: Rep[String], ews: Rep[String])(implicit ctx: SourceContext): Rep[Boolean]
-  
+
 }
 
 trait StringOpsExp extends StringOps with VariablesExp {
@@ -50,13 +51,15 @@ trait StringOpsExp extends StringOps with VariablesExp {
   case class StringValueOf(a: Exp[Any]) extends Def[String]
   case class StringEndsWith(s: Exp[String], ews: Exp[String]) extends Def[Boolean]
 
+
   def string_plus(s: Exp[Any], o: Exp[Any])(implicit ctx: SourceContext): Rep[String] = StringPlus(s,o)
   def string_trim(s: Exp[String])(implicit ctx: SourceContext) : Rep[String] = StringTrim(s)
   def string_split(s: Exp[String], separators: Exp[String])(implicit ctx: SourceContext) : Rep[Array[String]] = StringSplit(s, separators)
   def string_valueof(a: Exp[Any])(implicit ctx: SourceContext) = StringValueOf(a)
-  def string_endswith(s: Exp[String], ews: Exp[String])(implicit ctx: SourceContext) = StringEndsWith(s,ews)  
-  
-  override def mirror[A:Manifest](e: Def[A], f: Transformer): Exp[A] = (e match {
+  def string_endswith(s: Exp[String], ews: Exp[String])(implicit ctx: SourceContext) = StringEndsWith(s,ews)
+
+
+  override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit ctx: SourceContext): Exp[A] = (e match {
     case StringPlus(a,b) => string_plus(f(a),f(b))
     case StringEndsWith(s,ews) => string_endswith(f(s), f(ews))
     case _ => super.mirror(e,f)
