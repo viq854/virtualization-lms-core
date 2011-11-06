@@ -72,7 +72,7 @@ trait ScalaGenFatArrayLoopsFusionOpt extends ScalaGenArrayLoopsFat with ScalaGen
     tp.sym
   }
 
-  def plugInHelper[A,T:Manifest,U:Manifest](oldGen: Exp[Gen[A]], context: Block[Gen[T]], plug: Block[Gen[U]]): Block[Gen[U]] = context match {
+  override def plugInHelper[A,T:Manifest,U:Manifest](oldGen: Exp[Gen[A]], context: Block[Gen[T]], plug: Block[Gen[U]]): Block[Gen[U]] = context match {
     case Block(`oldGen`) => plug
     case Block(Def(IfThenElse(c,a,b@Block(Def(Skip(x)))))) => Block(toAtom2(IfThenElse(c,plugInHelper(oldGen,a,plug),Block(toAtom2(Skip(x))))))
     case Block(Def(SimpleLoop(sh,x,ForeachElem(y)))) => Block(toAtom2(SimpleLoop(sh,x,ForeachElem(plugInHelper(oldGen,y,plug)))))
@@ -267,18 +267,14 @@ trait FusionProg5 extends Arith with ArrayLoops with Print with OrderingOps {
     def flatten[T:Manifest](x: Rep[Array[Array[T]]]) =
       arrayFlat(x.length) { i => x.at(i) }
 
-    val range = array(100) { i => i }
+    val range = array(10) { i => i }
 //    val range1 = array(101) { i => i }
 
-    val nested = array(10) { i => range }
-
-    val flat = flatten(nested)
-
-    val mapped = map(flat){ i => i + 5 }
+    val nested = arrayFlat(range.length) { i => arrayFlat(range.length){ i => range}}
 
 //    val flattenedAgain = flatten(mapped)
 
-    print(mapped)
+    print(nested)
   }
 
 }
