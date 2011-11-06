@@ -28,6 +28,10 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
     def unapply(a: Def[Any]): Option[Exp[Any]] = unapplySimpleCollect(a)
   }
 
+  object SimpleForeach {
+    def unapply(a: Def[Any]): Option[(Sym[Int], Def[Any])] = unapplySimpleForeach(a)
+  }
+
   object SimpleCollectIf {
     def unapply(a: Def[Any]): Option[(Exp[Any],List[Exp[Boolean]])] = unapplySimpleCollectIf(a)
   }
@@ -80,6 +84,11 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
         // utils
         def WgetLoopShape(e: TTP): Exp[Int] = e.rhs match { case SimpleFatLoop(s,x,rhs) => s }
         def WgetLoopVar(e: TTP): List[Sym[Int]] = e.rhs match { case SimpleFatLoop(s,x,rhs) => List(x) }
+        def WgetLoopVarNested0(e: Def[Any]): List[Sym[Int]] = e match {
+          case SimpleForeach(x, rhs) => x :: WgetLoopVarNested0(rhs)
+          case _ => Nil
+        }
+        def WgetLoopVarNested(e: TTP): List[Sym[Int]] = e.rhs match { case SimpleFatLoop(s,x,rhs) => x :: rhs.flatMap(WgetLoopVarNested0(_))}
         def WgetLoopRes(e: TTP): List[Def[Any]] = e.rhs match { case SimpleFatLoop(s,x,rhs) => rhs }
 
         val loopCollectSyms = Wloops flatMap (e => (e.lhs zip WgetLoopRes(e)) collect { case (s, SimpleCollectIf(_,_)) => s })
@@ -101,6 +110,7 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
         currentScope.foreach(x => printlog(x))
         val WtableNeg = Wloops.flatMap { dx => // find non-simple dependencies (other than a(i))
           val thisLoopVars = WgetLoopVar(dx)
+          printlog("Loop vars " + dx + " = " + thisLoopVars)
           val otherLoopSyms = loopSyms diff (dx.lhs)
           getFatSchedule(currentScope)(WgetLoopRes(dx)) flatMap {
             case e@TTP(_, ThinDef(SimpleIndex(a,i))) if (thisLoopVars contains i) && (loopCollectSyms contains a) =>
@@ -232,7 +242,11 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
 
         for (b <- partitionsIn) {
           // try to add to an item in partitionsOut, if not possible add as-is
-          partitionsOut.find(a => canFuse(a,b)) match {
+          partitionsOut.find(a => {
+            printlog("A = " + a)
+            printlog("B = " + b)
+            printlog("canFuse = " + canFuse(a,b))
+            canFuse(a,b)}) match {
             case Some(a) =>
               val shapeA = WgetLoopShape(a)
               val shapeB = WgetLoopShape(b)
@@ -257,7 +271,7 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
                 assert(shapeA == shapeB, "loop shapes must match")
                 shapeA
               }
-
+              printlog("Fusing !!!!!")
               val fused = TTP(a.lhs:::b.lhs, SimpleFatLoop(shape, targetVar, WgetLoopRes(a):::WgetLoopRes(b)))
               partitionsOut = fused :: (partitionsOut diff List(a))
             case None => partitionsOut = b::partitionsOut

@@ -57,6 +57,12 @@ trait ScalaGenFatArrayLoopsFusionOpt extends ScalaGenArrayLoopsFat with ScalaGen
     case _ => super.unapplySimpleCollect(e)
   }
 
+  override def unapplySimpleForeach(e: Def[Any]) = e match {
+    case ArrayElem(_, Block(Def(SimpleLoop(s, x, ForeachElem(Block(Def(b))))))) => Some((x, b))
+    case SimpleLoop(s, x, ForeachElem(Block(Def(b)))) => Some((x, b))
+    case _ => printerr("Missed the match of " + e); super.unapplySimpleForeach(e)
+  }
+
   override def unapplySimpleCollectIf(e: Def[Any]) = e match {
     case ArrayElem(g,Block(Def(IfThenElse(c,Block(Def(SimpleCollectIf(a,cs))),Block(Def(Skip(_))))))) => Some((a,c::cs))
     case _ => super.unapplySimpleCollectIf(e)
@@ -235,15 +241,15 @@ trait FusionProg4 extends Arith with ArrayLoops with Print with OrderingOps {
     def flatten[T:Manifest](x: Rep[Array[Array[T]]]) =
       arrayFlat(x.length) { i => x.at(i) }
 
-    val range = array(100) { i => i }
+    val range = array(10) { i => i }
+//    val range1 = array(101) { i => i }
 
-    val nested = array(10) { i => range }
+    val nested = arrayFlat(range.length) { i => range}
+    val nested1 = map(nested)(i => i + 1)
 
-    val flat = flatten(nested)
+//    val flattenedAgain = flatten(mapped)
 
-    val filtered = filter(flat) {i => i > 50 }
-
-    print(filtered)
+    print(nested1)
   }
 
 }
@@ -298,24 +304,15 @@ trait FusionProg6 extends Arith with ArrayLoops with Print with OrderingOps {
     def flatten[T:Manifest](x: Rep[Array[Array[T]]]) =
       arrayFlat(x.length) { i => x.at(i) }
 
-    val range = array(1000) { i => i }
-    val range1 = array(1001) { i => i }
+    val range = array(10) { i => i }
+//    val range1 = array(101) { i => i }
 
-    val nested = array(10) { i => range }
+    val nested = arrayFlat(range.length) { i => range}
+    val nested1 = arrayFlat(nested.length){ i => range}
 
-    val flat = flatten(nested)
+//    val flattenedAgain = flatten(mapped)
 
-    val filtered1 = filter(flat)(i => i > 1111)
-
-    val mapped = map(filtered1){ i => range1 }
-
-    val flattenedAgain = flatten(mapped)
-
-    val filtered2 = filter(flattenedAgain) {i => i < 2222 }
-
-    val reduced = sum(filtered2.length) { i => filtered2.at(i) }
-
-    print(reduced)
+    print(nested1)
   }
 
 }
