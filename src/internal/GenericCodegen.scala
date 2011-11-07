@@ -39,8 +39,13 @@ trait GenericCodegen extends Traversal {
    * Strips of the Gen type and returns the string representation of the element type.
    */
   def stripGen[A](m: Manifest[A]): String = {
-    if (m.erasure == classOf[Gen[Any]])
-      remap(m.typeArguments.head)
+    if (m.erasure == classOf[Gen[Any]]) {
+      val res = remap(m.typeArguments.head)
+      if (res == "Any")
+        "String"
+      else
+        res
+      }
     else
       remap(m)
   }

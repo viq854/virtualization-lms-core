@@ -26,6 +26,7 @@ trait Expressions extends Utils {
 
   case class Sym[+T:Manifest](val id: Int) extends Exp[T] {
     var sourceInfo = Thread.currentThread.getStackTrace // until we can get useful info out of the manifest
+//    override def Type : Manifest[T @uncheckedVariance] = if (id == 121) manifest[String].asInstanceOf[Manifest[T]] else super.Type
   }
 
   case class Variable[+T](val e: Exp[Variable[T]]) // TODO: decide whether it should stay here ... FIXME: should be invariant

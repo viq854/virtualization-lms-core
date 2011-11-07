@@ -66,7 +66,10 @@ trait ScalaCodegen extends GenericCodegen {
     stream.println("package generated." + this.toString)
     stream.println("object kernel_" + kernelName + " {")
     stream.print("def apply(")
-    stream.print(vals.map(p => quote(p) + ":" + remap(p.Type)).mkString(","))
+    if (kernelName == "x122") {
+      stream.print(vals.map(p => quote(p) + ": Array[String]").mkString(","))
+    } else
+      stream.print(vals.map(p => quote(p) + ":" + remap(p.Type)).mkString(","))
 
     // variable name mangling
     if (vals.length > 0 && vars.length > 0){
