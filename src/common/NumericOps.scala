@@ -17,7 +17,8 @@ trait NumericOps extends Variables {
   implicit def varNumericToNumericOps[T:Numeric:Manifest](n: Var[T]) = new NumericOpsCls(readVar(n))
   
   class NumericOpsCls[T:Numeric:Manifest](lhs: Rep[T]){
-    def +[A](rhs: A)(implicit c: A => T) = numeric_plus(lhs,unit(c(rhs)))
+    //def +[A](rhs: A)(implicit c: A => T) = numeric_plus(lhs,unit(c(rhs)))
+    def +[A](rhs: A)(implicit c: A => Rep[T]) = numeric_plus(lhs,c(rhs))
     def +(rhs: Rep[T]) = numeric_plus(lhs,rhs)
     def -(rhs: Rep[T]) = numeric_minus(lhs,rhs)
     def *(rhs: Rep[T]) = numeric_times(lhs,rhs)

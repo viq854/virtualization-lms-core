@@ -12,6 +12,11 @@ trait ArrayOps extends Variables {
   implicit def repArrayToArrayOps[T:Manifest](a: Rep[Array[T]]) = new ArrayOpsCls(a)
   implicit def arrayToArrayOps[T:Manifest](a: Array[T]) = new ArrayOpsCls(unit(a))
 
+  object Array {
+    def apply[T:Manifest](size: Rep[Int]) = array_new[T](size)
+    implicit def emptyArray[T:Manifest] = array_new[T](unit(0))
+  }
+
   class ArrayOpsCls[T:Manifest](a: Rep[Array[T]]){
     def apply(n: Rep[Int]) = array_apply(a, n)
     def update(n: Rep[Int], y: Rep[T]) = array_update(a,n,y)
@@ -19,6 +24,7 @@ trait ArrayOps extends Variables {
     def foreach(block: Rep[T] => Rep[Unit]) = array_foreach(a, block)
   }
 
+  def array_new[T:Manifest](size: Rep[Int]): Rep[Array[T]]
   def array_apply[T:Manifest](x: Rep[Array[T]], n: Rep[Int]): Rep[T]
   def array_update[T:Manifest](x: Rep[Array[T]], n: Rep[Int], y: Rep[T]): Rep[Unit]
   def array_length[T:Manifest](x: Rep[Array[T]]) : Rep[Int]
@@ -27,11 +33,13 @@ trait ArrayOps extends Variables {
 
 trait ArrayOpsExp extends ArrayOps with EffectExp with VariablesExp {
 
+  case class ArrayNew[T:Manifest](size: Exp[Int], mT: Manifest[T]) extends Def[Array[T]]
   case class ArrayApply[T:Manifest](a: Exp[Array[T]], n: Exp[Int]) extends Def[T]
   case class ArrayUpdate[T:Manifest](a: Exp[Array[T]], n: Exp[Int], y: Exp[T]) extends Def[Unit]  
   case class ArrayLength[T:Manifest](a: Exp[Array[T]]) extends Def[Int]
   case class ArrayForeach[T](a: Exp[Array[T]], x: Sym[T], block: Exp[Unit]) extends Def[Unit]
 
+  def array_new[T:Manifest](size: Exp[Int]) = reflectMutable(ArrayNew(size, manifest[T]))
   def array_apply[T:Manifest](x: Exp[Array[T]], n: Exp[Int]): Exp[T] = ArrayApply(x, n)
   def array_update[T:Manifest](x: Exp[Array[T]], n: Exp[Int], y: Exp[T]) = reflectWrite(x)(ArrayUpdate(x,n,y))
   def array_length[T:Manifest](a: Exp[Array[T]]) : Rep[Int] = ArrayLength(a)
@@ -81,6 +89,7 @@ trait ScalaGenArrayOps extends BaseGenArrayOps with ScalaGenBase {
   import IR._
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any])(implicit stream: PrintWriter) = rhs match {
+    case ArrayNew(size, mT)  => emitValDef(sym, "new Array[" + remap(mT) + "](" + quote(size) + ")")
     case ArrayApply(x,n) => emitValDef(sym, "" + quote(x) + "(" + quote(n) + ")")
     case ArrayUpdate(x,n,y) => emitValDef(sym, quote(x) + "(" + quote(n) + ") = " + quote(y))
     case ArrayLength(x) => emitValDef(sym, "" + quote(x) + ".length")
